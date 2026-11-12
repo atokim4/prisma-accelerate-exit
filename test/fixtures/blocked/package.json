@@ -1,0 +1,8 @@
+{
+  "name": "blocked",
+  "private": true,
+  "dependencies": {
+    "@prisma/client": "^7.10.1",
+    "@prisma/extension-accelerate": "^3.0.1"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "no-accelerate",
+  "private": true,
+  "scripts": {
+    "postinstall": "prisma generate",
+    "accelerate": "node scripts/accelerate.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.1",
+    "@prisma/adapter-pg": "^7.10.1"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.1"
+  }
+}

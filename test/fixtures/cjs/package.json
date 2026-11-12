@@ -1,0 +1,9 @@
+{
+  "name": "cjs",
+  "private": true,
+  "scripts": { "postinstall": "prisma generate --no-engine" },
+  "dependencies": {
+    "@prisma/client": "~5.22.0",
+    "@prisma/extension-accelerate": "^1.2.1"
+  }
+}

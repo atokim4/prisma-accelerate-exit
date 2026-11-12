@@ -1,0 +1,50 @@
+{
+  "name": "prisma-accelerate-exit",
+  "version": "0.1.0",
+  "description": "Find and remove Prisma Accelerate from a project before the December 1, 2026 shutdown: extension, URLs, cacheStrategy, --no-engine, edge runtimes.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atokim4/prisma-accelerate-exit.git"
+  },
+  "author": "Sunnatulla E",
+  "type": "module",
+  "bin": {
+    "prisma-accelerate-exit": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "prisma",
+    "prisma-accelerate",
+    "codemod",
+    "migration",
+    "cli"
+  ],
+  "dependencies": {
+    "diff": "9.0.0",
+    "ts-morph": "28.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "vitest": "5.1.0"
+  },
+  "overrides": {
+    "minimatch": "11.0.8"
+  }
+}

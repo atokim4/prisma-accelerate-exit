@@ -1,0 +1,8 @@
+{
+  "name": "mongo",
+  "private": true,
+  "dependencies": {
+    "@prisma/client": "^6.16.0",
+    "@prisma/extension-accelerate": "^2.0.2"
+  }
+}
