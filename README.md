@@ -46,7 +46,7 @@ It reads the Prisma ORM major from `package.json` (or `node_modules`, or a pnpm 
 
 ## Tested on real code
 
-I ran it on 35 public repositories that depend on `@prisma/extension-accelerate` (33 apps plus Prisma's own examples and tests) and read every finding in the source. In 23 of the 33 apps, removing the import and `$extends` call was not enough: 14 had an edge entry that reaches Prisma Client, 7 had a legacy `prisma generate` flag, 6 used `accelerateUrl`, and 5 used Accelerate caching APIs (31 `cacheStrategy` calls). On 20 of the 21 projects that installed and built, `tsc --noEmit` after `--fix` reported no new errors; the 21st is the type change described above.
+I ran it on 35 public repositories that depend on `@prisma/extension-accelerate` (33 apps plus Prisma's own examples and tests) and read every finding in the source. In 23 of the 33 apps, removing the import and `$extends` call was not enough: 14 had an edge entry that reaches Prisma Client, 7 had a legacy `prisma generate` flag, 7 used `accelerateUrl`, and 5 used Accelerate caching APIs (31 `cacheStrategy` calls). On 20 of the 21 projects that installed and built, `tsc --noEmit` after `--fix` reported no new errors; the 21st is the type change described above.
 
 Example on a Prisma 7 app:
 
