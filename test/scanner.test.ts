@@ -141,6 +141,74 @@ describe("--fix", () => {
     expect(read(dir, "src/db.ts")).not.toContain("withAccelerate");
   });
 
+  it("removes an if that would return the same client on both paths", () => {
+    const dir = copyFixture("v6-app");
+    writeFileSync(
+      join(dir, "src/db.ts"),
+      [
+        'import { PrismaClient } from "@prisma/client";',
+        'import { withAccelerate } from "@prisma/extension-accelerate";',
+        "",
+        "const useAccelerate = process.env.USE_ACCELERATE === \"1\";",
+        "",
+        "export function flagged(): PrismaClient {",
+        "  const client = new PrismaClient();",
+        "  if (useAccelerate) {",
+        "    return client.$extends(withAccelerate()) as unknown as PrismaClient;",
+        "  }",
+        "  return client;",
+        "}",
+        "",
+        "function usesAccelerate(url: string): boolean {",
+        '  return url.startsWith("prisma://");',
+        "}",
+        "",
+        "export function checked(): PrismaClient {",
+        "  const client = new PrismaClient();",
+        '  if (usesAccelerate(process.env.DATABASE_URL ?? "")) return client.$extends(withAccelerate()) as unknown as PrismaClient;',
+        "  return client;",
+        "}",
+        "",
+        "export function other(fallback: PrismaClient): PrismaClient {",
+        "  const client = new PrismaClient();",
+        "  if (useAccelerate) return client.$extends(withAccelerate()) as unknown as PrismaClient;",
+        "  return fallback;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const result = scan(dir, { ...CHECK, fix: true });
+    const text = read(dir, "src/db.ts");
+    expect(text).toContain("export function flagged(): PrismaClient {\n  const client = new PrismaClient();\n  return client;\n}");
+    expect(text).toContain('  if (usesAccelerate(process.env.DATABASE_URL ?? "")) return client as unknown as PrismaClient;\n  return client;');
+    expect(text).toContain("  if (useAccelerate) return client as unknown as PrismaClient;\n  return fallback;");
+    expect(text).not.toContain("withAccelerate");
+    const manual = result.findings.filter((f) => f.file === "src/db.ts" && f.fix === "manual");
+    expect(manual.map((f) => [f.rule, f.severity, f.line])).toEqual([["extends-call", "warn", 20]]);
+  });
+
+  it("finds accelerateUrl in client options built outside new PrismaClient()", () => {
+    const dir = copyFixture("v7-app");
+    writeFileSync(
+      join(dir, "src/options.ts"),
+      [
+        'import { PrismaClient, type Prisma } from "@prisma/client";',
+        'import { PrismaPg } from "@prisma/adapter-pg";',
+        "",
+        "const prismaUrl = process.env.PRISMA_DATABASE_URL;",
+        "const options: Prisma.PrismaClientOptions = prismaUrl",
+        "  ? { accelerateUrl: prismaUrl }",
+        "  : { adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) };",
+        "export const prisma = new PrismaClient(options);",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(join(dir, "src/unrelated.ts"), 'export const cdn = { accelerateUrl: "https://cdn.example.com" };\n');
+    writeFileSync(join(dir, "src/types.ts"), "import type { PrismaClient } from \"@prisma/client\";\nexport interface Options { accelerateUrl?: string; client?: PrismaClient }\n");
+    const found = rulesAt(dir).filter((r) => r.startsWith("accelerate-url-option") && !r.includes("src/lib/"));
+    expect(found).toEqual(["accelerate-url-option src/options.ts:6"]);
+  });
+
   it("refuses to remove the extension while cache calls remain", () => {
     const dir = copyFixture("v7-app");
     const before = read(dir, "src/lib/prisma.ts");

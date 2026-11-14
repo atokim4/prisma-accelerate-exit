@@ -1,6 +1,7 @@
 import {
   type CallExpression,
   type Identifier,
+  type IfStatement,
   type ImportDeclaration,
   Node,
   type ObjectLiteralExpression,
@@ -123,6 +124,41 @@ function removeExtendsEdit(extendsCall: CallExpression): TextEdit {
     }
   }
   return { start: receiver.getEnd(), end: extendsCall.getEnd(), text: "" };
+}
+
+/** Strips parentheses and `as` / `satisfies` / `<T>` wrappers around an expression. */
+function unwrapExpression(node: Node): Node {
+  let current = node;
+  while (Node.isParenthesizedExpression(current) || Node.isAsExpression(current) || Node.isSatisfiesExpression(current) || Node.isTypeAssertion(current)) {
+    current = current.getExpression();
+  }
+  return current;
+}
+
+/**
+ * `if (cond) return client.$extends(withAccelerate()); return client;` (no else,
+ * the then-branch is that single return, the next statement returns the same
+ * client): once the extension is gone both paths return `client`.
+ */
+function guardedReturnAround(extendsCall: CallExpression): IfStatement | null {
+  const receiver = receiverOf(extendsCall);
+  if (!isPlainReference(receiver)) return null;
+  let branch: Node = extendsCall;
+  while (branch.getParent() && unwrapExpression(branch.getParentOrThrow()) === extendsCall) branch = branch.getParentOrThrow();
+  const returned = branch.getParent();
+  if (!returned || !Node.isReturnStatement(returned)) return null;
+  let statement: Node = returned;
+  const block = returned.getParent();
+  if (block && Node.isBlock(block)) {
+    if (block.getStatements().length !== 1) return null;
+    statement = block;
+  }
+  const ifStatement = statement.getParent();
+  if (!ifStatement || !Node.isIfStatement(ifStatement) || ifStatement.getThenStatement() !== statement || ifStatement.getElseStatement()) return null;
+  const next = ifStatement.getNextSibling();
+  if (!next || !Node.isReturnStatement(next)) return null;
+  const otherValue = next.getExpression();
+  return otherValue && unwrapExpression(otherValue).getText() === receiver.getText() ? ifStatement : null;
 }
 
 function removeRequire(declaration: VariableDeclaration): TextEdit {
@@ -290,12 +326,24 @@ export function analyzeSource(sourceFile: SourceFile, file: string, ormMajor: nu
         block(id, "withAccelerate used outside .$extends()");
         continue;
       }
+      const guard = guardedReturnAround(extendsCall);
+      const removable = guard !== null && isPlainReference(unwrapParentheses(guard.getExpression()));
       const edit: SourceEdit = {
         finding: finding(file, extendsCall, { rule: "extends-call", severity: "action", fix: "auto", message: ".$extends(withAccelerate()) on the Prisma Client." }),
-        edits: [removeExtendsEdit(extendsCall)],
+        edits: [guard && removable ? removeNode(guard) : removeExtendsEdit(extendsCall)],
       };
       result.findings.push(edit.finding);
       result.extensionEdits.push(edit);
+      if (guard && !removable) {
+        result.findings.push(
+          finding(file, guard, {
+            rule: "extends-call",
+            severity: "warn",
+            fix: "manual",
+            message: "After the fix both paths of this if return the same client. Remove the if (and its condition, if nothing else uses it) by hand.",
+          }),
+        );
+      }
     }
   }
 
@@ -308,6 +356,25 @@ export function analyzeSource(sourceFile: SourceFile, file: string, ormMajor: nu
     if (!property) continue;
     result.usesAccelerate = true;
     collectAccelerateUrl(options, property);
+  }
+
+  // Client options built elsewhere: `const options = flag ? { accelerateUrl } : { adapter }`.
+  if (sourceFile.getFullText().includes("PrismaClient")) {
+    for (const object of sourceFile.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression)) {
+      const property = object.getProperty("accelerateUrl");
+      if (!property || (!Node.isPropertyAssignment(property) && !Node.isShorthandPropertyAssignment(property))) continue;
+      const parent = object.getParent();
+      if (parent && Node.isNewExpression(parent) && /PrismaClient$/.test(parent.getExpression().getText())) continue;
+      result.usesAccelerate = true;
+      result.findings.push(
+        finding(file, property, {
+          rule: "accelerate-url-option",
+          severity: "action",
+          fix: "manual",
+          message: "accelerateUrl in client options built outside new PrismaClient(). Replace that path with a driver adapter by hand.",
+        }),
+      );
+    }
   }
 
   function collectAccelerateUrl(options: ObjectLiteralExpression, property: Node): void {
